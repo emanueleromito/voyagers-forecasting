@@ -17,7 +17,7 @@ from transformers import (
     PreTrainedModel,
 )
 
-import legacy.chronos
+import legacy.chronos as chronos
 from legacy.chronos.base import BaseChronosPipeline, ForecastType
 from legacy.chronos.utils import left_pad_and_stack_1D
 
