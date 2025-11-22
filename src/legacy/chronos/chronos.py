@@ -17,7 +17,7 @@ from transformers import (
     PreTrainedModel,
 )
 
-import legacy.chronos as chronos
+import legacy.chronos
 from legacy.chronos.base import BaseChronosPipeline, ForecastType
 from legacy.chronos.utils import left_pad_and_stack_1D
 
@@ -52,7 +52,7 @@ class ChronosConfig:
         )
 
     def create_tokenizer(self) -> "ChronosTokenizer":
-        class_ = getattr(chronos, self.tokenizer_class)
+        class_ = globals()[self.tokenizer_class]
         return class_(**self.tokenizer_kwargs, config=self)
 
 
