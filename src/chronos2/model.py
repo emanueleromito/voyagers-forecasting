@@ -13,7 +13,7 @@ from einops import rearrange, repeat
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
 
-from chronos.chronos_bolt import InstanceNorm, Patch
+from legacy.chronos.chronos_bolt import InstanceNorm, Patch
 
 from .config import Chronos2CoreConfig, Chronos2ForecastingConfig
 from .layers import (

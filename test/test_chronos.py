@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import torch
 
-from chronos import (
+from legacy.chronos import (
     BaseChronosPipeline,
     ChronosConfig,
     ChronosPipeline,

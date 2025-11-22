@@ -12,10 +12,11 @@ import pandas as pd
 import pytest
 import torch
 
-from chronos import BaseChronosPipeline, Chronos2Pipeline
-from chronos.chronos2.config import Chronos2CoreConfig
-from chronos.chronos2.layers import MHA
-from chronos.df_utils import convert_df_input_to_list_of_dicts_input
+from legacy.chronos import BaseChronosPipeline
+from chronos2 import Chronos2Pipeline
+from chronos2.config import Chronos2CoreConfig
+from chronos2.layers import MHA
+from legacy.chronos.df_utils import convert_df_input_to_list_of_dicts_input
 from test.util import create_df, create_future_df, get_forecast_start_times, validate_tensor
 
 DUMMY_MODEL_PATH = Path(__file__).parent / "dummy-chronos2-model"

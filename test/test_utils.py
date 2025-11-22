@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from chronos.utils import interpolate_quantiles, left_pad_and_stack_1D
+from legacy.chronos.utils import interpolate_quantiles, left_pad_and_stack_1D
 
 
 @pytest.mark.parametrize(

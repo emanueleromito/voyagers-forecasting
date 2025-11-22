@@ -10,8 +10,8 @@ import pandas as pd
 import pytest
 import torch
 
-from chronos import BaseChronosPipeline, ChronosBoltPipeline
-from chronos.chronos_bolt import InstanceNorm, Patch
+from legacy.chronos import BaseChronosPipeline, ChronosBoltPipeline
+from legacy.chronos.chronos_bolt import InstanceNorm, Patch
 from test.util import create_df, get_forecast_start_times, validate_tensor
 
 DUMMY_MODEL_PATH = Path(__file__).parent / "dummy-chronos-bolt-model"

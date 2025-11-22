@@ -10,7 +10,7 @@ from transformers.trainer import Trainer
 from transformers.trainer_callback import TrainerCallback
 
 if TYPE_CHECKING:
-    from chronos.chronos2.dataset import Chronos2Dataset
+    from chronos2.dataset import Chronos2Dataset
 
 
 def seed_worker(worker_id: int):

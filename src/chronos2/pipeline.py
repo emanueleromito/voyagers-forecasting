@@ -17,12 +17,12 @@ from einops import rearrange, repeat
 from torch.utils.data import DataLoader
 from transformers import AutoConfig
 
-import chronos.chronos2
-from chronos.base import BaseChronosPipeline, ForecastType
-from chronos.chronos2 import Chronos2Model
-from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
-from chronos.df_utils import convert_df_input_to_list_of_dicts_input
-from chronos.utils import interpolate_quantiles, weighted_quantile
+import chronos2
+from legacy.chronos.base import BaseChronosPipeline, ForecastType
+from chronos2 import Chronos2Model
+from chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
+from legacy.chronos.df_utils import convert_df_input_to_list_of_dicts_input
+from legacy.chronos.utils import interpolate_quantiles, weighted_quantile
 
 if TYPE_CHECKING:
     import datasets
@@ -151,7 +151,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         import torch.cuda
         from transformers.training_args import TrainingArguments
 
-        from chronos.chronos2.trainer import Chronos2Trainer, EvaluateAndSaveFinalStepCallback
+        from chronos2.trainer import Chronos2Trainer, EvaluateAndSaveFinalStepCallback
 
         # Create a copy of the model to avoid modifying the original
         config = deepcopy(self.model.config)
@@ -841,7 +841,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         import datasets
         import fev
 
-        from chronos.chronos2.dataset import convert_fev_window_to_list_of_dicts_input
+        from chronos2.dataset import convert_fev_window_to_list_of_dicts_input
 
         inputs, target_columns, past_dynamic_columns, known_dynamic_columns = (
             convert_fev_window_to_list_of_dicts_input(window=window, as_univariate=as_univariate)
@@ -932,7 +932,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         inference_time_s
             Total time that it took to make predictions for all windows (in seconds)
         """
-        from chronos.chronos2.dataset import convert_fev_window_to_list_of_dicts_input
+        from chronos2.dataset import convert_fev_window_to_list_of_dicts_input
 
         try:
             import fev
@@ -1071,7 +1071,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
 
         architecture = config.architectures[0]
-        class_ = getattr(chronos.chronos2, architecture)
+        class_ = getattr(chronos2, architecture)
 
         if class_ is None:
             logger.warning(f"Unknown architecture: {architecture}, defaulting to Chronos2Model")
