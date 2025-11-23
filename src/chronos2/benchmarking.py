@@ -173,7 +173,15 @@ def evaluate_on_monash_dataset(
     logger.info(f"Evaluating on {len(test_data)} series...")
     
     # Generate forecasts
-    forecasts = predictor.predict(test_data)
+    # We need to truncate the target by prediction_length to simulate the forecasting scenario
+    # The test set in GluonTS typically contains the full time series (history + future)
+    test_data_input = []
+    for entry in test_data:
+        entry_copy = entry.copy()
+        entry_copy["target"] = entry["target"][:-predictor.prediction_length]
+        test_data_input.append(entry_copy)
+        
+    forecasts = predictor.predict(test_data_input)
     
     # Convert test data to time series for evaluation
     tss = []
