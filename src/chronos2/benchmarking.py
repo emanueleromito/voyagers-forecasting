@@ -195,103 +195,6 @@ def evaluate_on_monash_dataset(
     return agg_metrics
 
 
-def evaluate_on_gift_eval_dataset(
-    predictor: Chronos2Predictor,
-    dataset_name: str,
-    term: str = "short",
-    use_multivariate: bool = True,
-    metrics: Optional[List] = None,
-) -> Dict[str, Any]:
-    """
-    Evaluate model on a GIFT-Eval dataset.
-    
-    Parameters
-    ----------
-    predictor : Chronos2Predictor
-        The predictor to evaluate
-    dataset_name : str
-        Name of the dataset (e.g., 'm4_weekly', 'electricity')
-    term : str, optional
-        Forecast term ('short', 'medium', 'long'), by default 'short'
-    use_multivariate : bool, optional
-        Whether to use multivariate data if available, by default True
-    metrics : List, optional
-        List of GluonTS metrics to compute
-        
-    Returns
-    -------
-    Dict[str, Any]
-        Dictionary of evaluation metrics
-    """
-    try:
-        from gift_eval.data import Dataset
-        from gluonts.model import evaluate_forecasts
-    except ImportError:
-        raise ImportError(
-            "gift_eval package is required. Install with: pip install gift-eval"
-        )
-    
-    if metrics is None:
-        from gluonts.ev.metrics import (
-            MAE, MAPE, MASE, MSE, MSIS, ND, NRMSE, RMSE, SMAPE,
-            MeanWeightedSumQuantileLoss,
-        )
-        metrics = [
-            MSE(forecast_type="mean"),
-            MSE(forecast_type=0.5),
-            MAE(),
-            MASE(),
-            MAPE(),
-            SMAPE(),
-            MSIS(),
-            RMSE(),
-            NRMSE(),
-            ND(),
-            MeanWeightedSumQuantileLoss(quantile_levels=predictor.quantile_levels),
-        ]
-    
-    # Load dataset
-    is_multivariate_source = (
-        Dataset(name=dataset_name, term=term, to_univariate=False).target_dim > 1
-    )
-    
-    dataset = Dataset(
-        name=dataset_name,
-        term=term,
-        to_univariate=is_multivariate_source and not use_multivariate,
-    )
-    
-    logger.info(f"Dataset: {dataset_name}/{term}, Size: {len(dataset.test_data)}")
-    
-    # Avoid cross-batch leakage with rolling window evaluation
-    forecast_windows = []
-    n_windows = dataset.test_data.windows
-    
-    for window_idx in range(n_windows):
-        entries_window_k = list(
-            itertools.islice(dataset.test_data.input, window_idx, None, n_windows)
-        )
-        forecasts_window_k = list(predictor.predict(entries_window_k))
-        forecast_windows.append(forecasts_window_k)
-    
-    # Interleave results
-    forecasts = [item for items in zip(*forecast_windows) for item in items]
-    
-    # Evaluate
-    season_length = get_seasonality(dataset.freq)
-    
-    return evaluate_forecasts(
-        forecasts,
-        test_data=dataset.test_data,
-        metrics=metrics,
-        batch_size=1024,
-        axis=None,
-        mask_invalid_label=True,
-        allow_nan_forecast=False,
-        seasonality=season_length,
-    )
-
-
 def run_benchmark(
     model: Chronos2Model,
     datasets: List[Dict[str, Any]],
@@ -299,7 +202,7 @@ def run_benchmark(
     device: Optional[str] = None,
 ) -> pd.DataFrame:
     """
-    Run benchmark on multiple datasets.
+    Run benchmark on multiple Monash datasets.
     
     Parameters
     ----------
@@ -307,10 +210,8 @@ def run_benchmark(
         The model to benchmark
     datasets : List[Dict[str, Any]]
         List of dataset configurations, each dict should have:
-        - 'name': dataset name
-        - 'type': 'monash' or 'gift-eval'
+        - 'name': dataset name (e.g., 'electricity', 'traffic')
         - 'prediction_length': forecast horizon
-        - 'term': (for GIFT-Eval only) 'short', 'medium', or 'long'
         - 'max_samples': (optional) max samples to evaluate
     batch_size : int, optional
         Batch size for inference, by default 32
@@ -326,11 +227,10 @@ def run_benchmark(
     
     for ds_config in datasets:
         name = ds_config['name']
-        ds_type = ds_config.get('type', 'monash')
         pred_len = ds_config['prediction_length']
         
         logger.info(f"\n{'='*60}")
-        logger.info(f"Evaluating on {name} ({ds_type})")
+        logger.info(f"Evaluating on {name}")
         logger.info(f"{'='*60}")
         
         try:
@@ -341,25 +241,14 @@ def run_benchmark(
                 device=device,
             )
             
-            if ds_type == 'monash':
-                metrics = evaluate_on_monash_dataset(
-                    predictor=predictor,
-                    dataset_name=name,
-                    max_samples=ds_config.get('max_samples'),
-                )
-            elif ds_type == 'gift-eval':
-                metrics = evaluate_on_gift_eval_dataset(
-                    predictor=predictor,
-                    dataset_name=name,
-                    term=ds_config.get('term', 'short'),
-                )
-            else:
-                logger.error(f"Unknown dataset type: {ds_type}")
-                continue
+            metrics = evaluate_on_monash_dataset(
+                predictor=predictor,
+                dataset_name=name,
+                max_samples=ds_config.get('max_samples'),
+            )
             
             if metrics:
                 metrics['dataset'] = name
-                metrics['type'] = ds_type
                 results.append(metrics)
                 
         except Exception as e:
