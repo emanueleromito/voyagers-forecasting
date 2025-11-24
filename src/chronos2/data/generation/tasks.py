@@ -90,7 +90,13 @@ class TaskSampler:
             
             past_covariates[name] = cov_data
             if is_known:
-                future_covariates[name] = cov_data
+                # For training data, we just need to indicate WHICH covariates are known
+                # The actual values are taken from 'past_covariates' (which contains the full series)
+                # by the dataset slicing logic.
+                # We set it to None so Chronos2Dataset fills it with NaNs of correct length (prediction_length)
+                # or we can just pass a dummy array of correct length if we knew prediction_length here.
+                # But passing None is safer as the dataset handles it.
+                future_covariates[name] = None
                 
         return {
             "target": target,
