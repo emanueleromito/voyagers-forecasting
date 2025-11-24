@@ -565,12 +565,22 @@ class Chronos2Dataset(IterableDataset):
         else:
             num_output_patches = self.max_output_patches
             
+        horizon = num_output_patches * self.output_patch_size
+
+        future_target = None
+        if self.mode != DatasetMode.TEST:
+            future_target = torch.cat(cast(list[torch.Tensor], batch_future_target_tensor_list), dim=0)
+            if future_target.shape[-1] > horizon:
+                future_target = future_target[..., :horizon]
+
+        future_covariates = torch.cat(batch_future_covariates_tensor_list, dim=0)
+        if future_covariates.shape[-1] > horizon:
+            future_covariates = future_covariates[..., :horizon]
+
         return {
             "context": left_pad_and_cat_2D(batch_context_tensor_list),
-            "future_target": None
-            if self.mode == DatasetMode.TEST
-            else torch.cat(cast(list[torch.Tensor], batch_future_target_tensor_list), dim=0),
-            "future_covariates": torch.cat(batch_future_covariates_tensor_list, dim=0),
+            "future_target": future_target,
+            "future_covariates": future_covariates,
             "group_ids": torch.cat(batch_group_ids_list, dim=0),
             "num_output_patches": num_output_patches,
             "target_idx_ranges": target_idx_ranges,
