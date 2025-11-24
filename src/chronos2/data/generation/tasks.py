@@ -1,0 +1,99 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from typing import List, Dict, Union, Optional
+import numpy as np
+import torch
+
+from .base import TimeSeriesGenerator
+from .multivariate import Multivariatizer, LinearMixupMultivariatizer, NonLinearMixupMultivariatizer, SequentialMultivariatizer
+
+class TaskSampler:
+    """
+    Samples heterogeneous forecasting tasks (Univariate, Multivariate, Covariate-Informed).
+    """
+    def __init__(
+        self,
+        base_generators: List[TimeSeriesGenerator],
+        multivariatizers: Optional[List[Multivariatizer]] = None,
+        univariate_prob: float = 0.4,
+        multivariate_prob: float = 0.3,
+        covariate_prob: float = 0.3,
+        min_variates: int = 2,
+        max_variates: int = 5,
+    ):
+        self.base_generators = base_generators
+        if multivariatizers is None:
+            self.multivariatizers = [
+                LinearMixupMultivariatizer(base_generators),
+                NonLinearMixupMultivariatizer(base_generators),
+                SequentialMultivariatizer(base_generators),
+            ]
+        else:
+            self.multivariatizers = multivariatizers
+            
+        self.probs = [univariate_prob, multivariate_prob, covariate_prob]
+        assert sum(self.probs) == 1.0
+        
+        self.min_variates = min_variates
+        self.max_variates = max_variates
+
+    def sample(self, length: int) -> Dict[str, Union[np.ndarray, Dict[str, np.ndarray]]]:
+        task_type = np.random.choice(['univariate', 'multivariate', 'covariate'], p=self.probs)
+        
+        if task_type == 'univariate':
+            return self._sample_univariate(length)
+        elif task_type == 'multivariate':
+            return self._sample_multivariate(length)
+        else:
+            return self._sample_covariate(length)
+
+    def _sample_univariate(self, length: int) -> Dict:
+        gen = np.random.choice(self.base_generators)
+        ts = gen.generate(length)
+        return {"target": ts}
+
+    def _sample_multivariate(self, length: int) -> Dict:
+        n_variates = np.random.randint(self.min_variates, self.max_variates + 1)
+        multivariatizer = np.random.choice(self.multivariatizers)
+        ts = multivariatizer.generate(length, n_variates)
+        return {"target": ts}
+
+    def _sample_covariate(self, length: int) -> Dict:
+        n_variates = np.random.randint(self.min_variates, self.max_variates + 1)
+        multivariatizer = np.random.choice(self.multivariatizers)
+        ts = multivariatizer.generate(length, n_variates) # (n_variates, length)
+        
+        # Partition variates into target, past_covariates, future_covariates
+        # We need at least 1 target
+        n_targets = np.random.randint(1, n_variates)
+        n_covariates = n_variates - n_targets
+        
+        # Shuffle indices to randomly assign roles
+        indices = np.arange(n_variates)
+        np.random.shuffle(indices)
+        
+        target_indices = indices[:n_targets]
+        covariate_indices = indices[n_targets:]
+        
+        target = ts[target_indices]
+        
+        past_covariates = {}
+        future_covariates = {}
+        
+        for i, idx in enumerate(covariate_indices):
+            name = f"cov_{i}"
+            cov_data = ts[idx]
+            
+            # Randomly decide if it's known in future or past-only
+            is_known = np.random.rand() > 0.5
+            
+            past_covariates[name] = cov_data
+            if is_known:
+                future_covariates[name] = cov_data
+                
+        return {
+            "target": target,
+            "past_covariates": past_covariates,
+            "future_covariates": future_covariates
+        }
