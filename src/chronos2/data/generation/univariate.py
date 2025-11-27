@@ -52,23 +52,26 @@ class KernelSynthGenerator(TimeSeriesGenerator):
         binary_maps = [lambda x, y: x + y, lambda x, y: x * y]
         return np.random.choice(binary_maps)(a, b)
 
-    def generate(self, length: int) -> np.ndarray:
+    def generate(self, length: int, random_state: Optional[int] = None) -> np.ndarray:
         # Note: We use the configured data_length for X scaling to match the kernel parameters
         # But we sample 'length' points.
         X = np.linspace(0, 1, length)[:, None]
         
-        selected_kernels = np.random.choice(
-            self.kernel_bank, np.random.randint(1, self.max_kernels + 1), replace=True
+        # Use local RNG if random_state is provided
+        rng = np.random.RandomState(random_state) if random_state is not None else np.random
+        
+        selected_kernels = rng.choice(
+            self.kernel_bank, rng.randint(1, self.max_kernels + 1), replace=True
         )
         kernel = functools.reduce(self._random_binary_map, selected_kernels)
         
         try:
             gpr = GaussianProcessRegressor(kernel=kernel)
-            ts = gpr.sample_y(X, n_samples=1)
+            ts = gpr.sample_y(X, n_samples=1, random_state=random_state)
             return ts.squeeze()
         except Exception:
             # Fallback in case of numerical instability
-            return np.random.randn(length)
+            return rng.randn(length)
 
 
 class ARGenerator(TimeSeriesGenerator):
@@ -79,18 +82,20 @@ class ARGenerator(TimeSeriesGenerator):
         self.order = order
         self.noise_std = noise_std
 
-    def generate(self, length: int) -> np.ndarray:
+    def generate(self, length: int, random_state: Optional[int] = None) -> np.ndarray:
+        rng = np.random.RandomState(random_state) if random_state is not None else np.random
+        
         # Randomly sample AR coefficients
         # We want a stable process, so we keep roots inside unit circle
         # A simple heuristic is to normalize coefficients to sum to < 1
-        coeffs = np.random.uniform(-1, 1, self.order)
+        coeffs = rng.uniform(-1, 1, self.order)
         coeffs /= (np.abs(coeffs).sum() + 0.1) 
         
         ts = np.zeros(length)
         # Initialize with noise
-        ts[:self.order] = np.random.normal(0, self.noise_std, self.order)
+        ts[:self.order] = rng.normal(0, self.noise_std, self.order)
         
-        noise = np.random.normal(0, self.noise_std, length)
+        noise = rng.normal(0, self.noise_std, length)
         
         for t in range(self.order, length):
             # AR(p) process: X_t = c + sum(phi_i * X_{t-i}) + epsilon_t
@@ -107,33 +112,35 @@ class TrendSeasonalityGenerator(TimeSeriesGenerator):
     def __init__(self, noise_std: float = 0.1):
         self.noise_std = noise_std
 
-    def generate(self, length: int) -> np.ndarray:
+    def generate(self, length: int, random_state: Optional[int] = None) -> np.ndarray:
+        rng = np.random.RandomState(random_state) if random_state is not None else np.random
+        
         t = np.arange(length)
         
         # 1. Trend
-        trend_type = np.random.choice(['linear', 'quadratic', 'sigmoid'])
+        trend_type = rng.choice(['linear', 'quadratic', 'sigmoid'])
         if trend_type == 'linear':
-            slope = np.random.uniform(-0.01, 0.01)
+            slope = rng.uniform(-0.01, 0.01)
             trend = slope * t
         elif trend_type == 'quadratic':
-            a = np.random.uniform(-0.0001, 0.0001)
-            b = np.random.uniform(-0.01, 0.01)
+            a = rng.uniform(-0.0001, 0.0001)
+            b = rng.uniform(-0.01, 0.01)
             trend = a * t**2 + b * t
         else: # sigmoid
-            k = np.random.uniform(0.01, 0.1)
-            x0 = np.random.uniform(0, length)
+            k = rng.uniform(0.01, 0.1)
+            x0 = rng.uniform(0, length)
             trend = 1 / (1 + np.exp(-k * (t - x0)))
 
         # 2. Seasonality
         seasonality = np.zeros(length)
-        num_seasonal_components = np.random.randint(1, 4)
+        num_seasonal_components = rng.randint(1, 4)
         for _ in range(num_seasonal_components):
-            period = np.random.choice([12, 24, 168, 365]) # Common periods
-            phase = np.random.uniform(0, 2 * np.pi)
-            amplitude = np.random.uniform(0.1, 5.0)
+            period = rng.choice([12, 24, 168, 365]) # Common periods
+            phase = rng.uniform(0, 2 * np.pi)
+            amplitude = rng.uniform(0.1, 5.0)
             seasonality += amplitude * np.sin(2 * np.pi * t / period + phase)
 
         # 3. Noise
-        noise = np.random.normal(0, self.noise_std, length)
+        noise = rng.normal(0, self.noise_std, length)
         
         return trend + seasonality + noise

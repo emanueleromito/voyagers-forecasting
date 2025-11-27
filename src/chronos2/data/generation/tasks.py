@@ -38,40 +38,42 @@ class TaskSampler:
         self.min_variates = min_variates
         self.max_variates = max_variates
 
-    def sample(self, length: int) -> Dict[str, Union[np.ndarray, Dict[str, np.ndarray]]]:
-        task_type = np.random.choice(['univariate', 'multivariate', 'covariate'], p=self.probs)
+    def sample(self, length: int, random_state: Optional[int] = None) -> Dict[str, Union[np.ndarray, Dict[str, np.ndarray]]]:
+        rng = np.random.RandomState(random_state) if random_state is not None else np.random
+        
+        task_type = rng.choice(['univariate', 'multivariate', 'covariate'], p=self.probs)
         
         if task_type == 'univariate':
-            return self._sample_univariate(length)
+            return self._sample_univariate(length, rng, random_state)
         elif task_type == 'multivariate':
-            return self._sample_multivariate(length)
+            return self._sample_multivariate(length, rng, random_state)
         else:
-            return self._sample_covariate(length)
+            return self._sample_covariate(length, rng, random_state)
 
-    def _sample_univariate(self, length: int) -> Dict:
-        gen = np.random.choice(self.base_generators)
-        ts = gen.generate(length)
+    def _sample_univariate(self, length: int, rng, random_state: Optional[int] = None) -> Dict:
+        gen = rng.choice(self.base_generators)
+        ts = gen.generate(length, random_state=random_state)
         return {"target": ts}
 
-    def _sample_multivariate(self, length: int) -> Dict:
-        n_variates = np.random.randint(self.min_variates, self.max_variates + 1)
-        multivariatizer = np.random.choice(self.multivariatizers)
-        ts = multivariatizer.generate(length, n_variates)
+    def _sample_multivariate(self, length: int, rng, random_state: Optional[int] = None) -> Dict:
+        n_variates = rng.randint(self.min_variates, self.max_variates + 1)
+        multivariatizer = rng.choice(self.multivariatizers)
+        ts = multivariatizer.generate(length, n_variates, random_state=random_state)
         return {"target": ts}
 
-    def _sample_covariate(self, length: int) -> Dict:
-        n_variates = np.random.randint(self.min_variates, self.max_variates + 1)
-        multivariatizer = np.random.choice(self.multivariatizers)
-        ts = multivariatizer.generate(length, n_variates) # (n_variates, length)
+    def _sample_covariate(self, length: int, rng, random_state: Optional[int] = None) -> Dict:
+        n_variates = rng.randint(self.min_variates, self.max_variates + 1)
+        multivariatizer = rng.choice(self.multivariatizers)
+        ts = multivariatizer.generate(length, n_variates, random_state=random_state) # (n_variates, length)
         
         # Partition variates into target, past_covariates, future_covariates
         # We need at least 1 target
-        n_targets = np.random.randint(1, n_variates)
+        n_targets = rng.randint(1, n_variates)
         n_covariates = n_variates - n_targets
         
         # Shuffle indices to randomly assign roles
         indices = np.arange(n_variates)
-        np.random.shuffle(indices)
+        rng.shuffle(indices)
         
         target_indices = indices[:n_targets]
         covariate_indices = indices[n_targets:]
@@ -86,7 +88,7 @@ class TaskSampler:
             cov_data = ts[idx]
             
             # Randomly decide if it's known in future or past-only
-            is_known = np.random.rand() > 0.5
+            is_known = rng.rand() > 0.5
             
             past_covariates[name] = cov_data
             if is_known:

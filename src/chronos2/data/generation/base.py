@@ -3,6 +3,7 @@
 
 import abc
 import numpy as np
+from typing import Optional
 
 class TimeSeriesGenerator(abc.ABC):
     """
@@ -10,7 +11,7 @@ class TimeSeriesGenerator(abc.ABC):
     """
     
     @abc.abstractmethod
-    def generate(self, length: int) -> np.ndarray:
+    def generate(self, length: int, random_state: Optional[int] = None) -> np.ndarray:
         """
         Generate a time series of the specified length.
         
@@ -18,6 +19,8 @@ class TimeSeriesGenerator(abc.ABC):
         ----------
         length
             The length of the time series to generate.
+        random_state
+            Random seed for reproducibility.
             
         Returns
         -------

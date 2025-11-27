@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import abc
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -20,7 +20,7 @@ class Multivariatizer(abc.ABC):
         self.base_generators = base_generators
 
     @abc.abstractmethod
-    def generate(self, length: int, n_variates: int) -> np.ndarray:
+    def generate(self, length: int, n_variates: int, random_state: Optional[int] = None) -> np.ndarray:
         """
         Generate a multivariate time series.
 
@@ -30,6 +30,8 @@ class Multivariatizer(abc.ABC):
             Length of the time series.
         n_variates
             Number of variates (dimensions) to generate.
+        random_state
+            Random seed for reproducibility.
 
         Returns
         -------
@@ -44,18 +46,22 @@ class LinearMixupMultivariatizer(Multivariatizer):
     Generates multivariate series by linear combinations of independent base series.
     Y = A * X, where X are independent base series and A is a mixing matrix.
     """
-    def generate(self, length: int, n_variates: int) -> np.ndarray:
+    def generate(self, length: int, n_variates: int, random_state: Optional[int] = None) -> np.ndarray:
+        rng = np.random.RandomState(random_state) if random_state is not None else np.random
+        
         # Generate n_variates independent base series
         # We randomly pick a generator for each latent dimension
         base_series_list = []
-        for _ in range(n_variates):
-            gen = np.random.choice(self.base_generators)
-            base_series_list.append(gen.generate(length))
+        for i in range(n_variates):
+            gen = rng.choice(self.base_generators)
+            # Use deterministic sub-seed if random_state is provided
+            sub_seed = random_state + i if random_state is not None else None
+            base_series_list.append(gen.generate(length, random_state=sub_seed))
         
         X = np.stack(base_series_list) # (n_variates, length)
         
         # Random mixing matrix
-        A = np.random.randn(n_variates, n_variates)
+        A = rng.randn(n_variates, n_variates)
         
         # Mix
         Y = A @ X
@@ -67,17 +73,23 @@ class NonLinearMixupMultivariatizer(Multivariatizer):
     """
     Generates multivariate series by passing independent base series through a random MLP.
     """
-    def generate(self, length: int, n_variates: int) -> np.ndarray:
+    def generate(self, length: int, n_variates: int, random_state: Optional[int] = None) -> np.ndarray:
+        rng = np.random.RandomState(random_state) if random_state is not None else np.random
+        
         # Generate n_variates independent base series
         base_series_list = []
-        for _ in range(n_variates):
-            gen = np.random.choice(self.base_generators)
-            base_series_list.append(gen.generate(length))
+        for i in range(n_variates):
+            gen = rng.choice(self.base_generators)
+            sub_seed = random_state + i if random_state is not None else None
+            base_series_list.append(gen.generate(length, random_state=sub_seed))
         
         X = np.stack(base_series_list).T # (length, n_variates)
         X_torch = torch.from_numpy(X).float()
         
-        # Random MLP
+        # Random MLP with deterministic initialization
+        if random_state is not None:
+            torch.manual_seed(random_state)
+        
         mlp = nn.Sequential(
             nn.Linear(n_variates, n_variates * 2),
             nn.ReLU(),
@@ -94,10 +106,12 @@ class SequentialMultivariatizer(Multivariatizer):
     """
     Generates multivariate series with lead-lag relationships.
     """
-    def generate(self, length: int, n_variates: int) -> np.ndarray:
+    def generate(self, length: int, n_variates: int, random_state: Optional[int] = None) -> np.ndarray:
+        rng = np.random.RandomState(random_state) if random_state is not None else np.random
+        
         # Generate 1 base series
-        gen = np.random.choice(self.base_generators)
-        base_series = gen.generate(length + n_variates) # Generate extra for shifting
+        gen = rng.choice(self.base_generators)
+        base_series = gen.generate(length + n_variates, random_state=random_state) # Generate extra for shifting
         
         Y = []
         for i in range(n_variates):
@@ -108,7 +122,7 @@ class SequentialMultivariatizer(Multivariatizer):
         Y = np.stack(Y)
         
         # Add some independent noise to each variate to make it not perfectly correlated
-        noise = np.random.normal(0, 0.1 * np.std(Y), Y.shape)
+        noise = rng.normal(0, 0.1 * np.std(Y), Y.shape)
         Y += noise
         
         return Y
