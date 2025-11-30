@@ -15,7 +15,8 @@ from gluonts.model.evaluation import evaluate_forecasts
 from gluonts.model.forecast import QuantileForecast, SampleForecast
 from tqdm.auto import tqdm
 
-from chronos import BaseChronosPipeline, Chronos2Pipeline, ChronosBoltPipeline, ChronosPipeline, ForecastType
+from legacy.chronos import BaseChronosPipeline, ChronosBoltPipeline, ChronosPipeline, ForecastType
+from chronos2.pipeline import Chronos2Pipeline
 
 app = typer.Typer(pretty_exceptions_enable=False)
 
