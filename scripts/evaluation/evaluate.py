@@ -18,9 +18,12 @@ from tqdm.auto import tqdm
 from legacy.chronos import BaseChronosPipeline, ChronosBoltPipeline, ChronosPipeline, ForecastType
 from chronos2.pipeline import Chronos2Pipeline
 
+
+
 app = typer.Typer(pretty_exceptions_enable=False)
 
-QUANTILES = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+QUANTILES = [0.1, 0.2, 0.3, 0.4, 0.6, 0.6, 0.7, 0.8, 0.9]
 
 
 def to_gluonts_univariate(hf_dataset: datasets.Dataset):
@@ -131,10 +134,10 @@ def eval_pipeline_and_save_results(
         dataset_name = config["name"]
         prediction_length = config["prediction_length"]
 
-        logger.info(f"Loading {dataset_name}")
+        print(f"Loading {dataset_name}")
         test_data = load_and_split_dataset(backtest_config=config)
 
-        logger.info(f"Generating forecasts for {dataset_name} ({len(test_data.input)} time series)")
+        print(f"Generating forecasts for {dataset_name} ({len(test_data.input)} time series)")
         forecasts = generate_forecasts(
             test_data.input,
             pipeline=pipeline,
@@ -143,7 +146,7 @@ def eval_pipeline_and_save_results(
             **predict_kwargs,
         )
 
-        logger.info(f"Evaluating forecasts for {dataset_name}")
+        print(f"Evaluating forecasts for {dataset_name}")
         metrics = (
             evaluate_forecasts(
                 forecasts,
@@ -341,7 +344,4 @@ def chronos_2(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    logger = logging.getLogger("Chronos Evaluation")
-    logger.setLevel(logging.INFO)
     app()
