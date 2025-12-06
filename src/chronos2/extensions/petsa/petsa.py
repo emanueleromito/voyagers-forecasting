@@ -1,13 +1,16 @@
 import math
-from typing import Optional
+import warnings
+from typing import Optional, Sequence, Mapping, Any
 
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
+from torch.utils.data import DataLoader
 
 from chronos2.model import Chronos2Model
 from chronos2.layers import TimeSelfAttention
 from chronos2.pipeline import Chronos2Pipeline
+from chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
 
 
 class LoRALayer(nn.Module):
@@ -206,6 +209,93 @@ class ChronosPETSAPipeline(Chronos2Pipeline):
         super().__init__(model=model.model)
         self.wrapper = model
         
+    def predict(
+        self,
+        inputs: TensorOrArray
+        | Sequence[TensorOrArray]
+        | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray]]],
+        prediction_length: int | None = None,
+        batch_size: int = 256,
+        context_length: int | None = None,
+        predict_batches_jointly: bool = False,
+        limit_prediction_length: bool = False,
+        **kwargs,
+    ) -> list[torch.Tensor]:
+        """
+        Generate forecasts for the given time series.
+        Overridden to remove @torch.no_grad() decorator for PETSA.
+        """
+        model_prediction_length = self.model_prediction_length
+        if prediction_length is None:
+            prediction_length = model_prediction_length
+
+        max_output_patches = kwargs.pop("max_output_patches", self.max_output_patches)
+        unrolled_quantiles = kwargs.pop("unrolled_quantiles", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+
+        if len(kwargs) > 0:
+            raise TypeError(f"Unexpected keyword arguments: {list(kwargs.keys())}.")
+
+        if not set(unrolled_quantiles).issubset(self.quantiles):
+            raise ValueError(
+                f"Unrolled quantiles must be a subset of the model's quantiles. "
+                f"Found: {unrolled_quantiles=}, model_quantiles={self.quantiles}"
+            )
+        unrolled_quantiles_tensor = torch.tensor(unrolled_quantiles)
+
+        if prediction_length > model_prediction_length:
+            msg = (
+                f"We recommend keeping prediction length <= {model_prediction_length}. "
+                "The quality of longer predictions may degrade since the model is not optimized for it. "
+            )
+            if limit_prediction_length:
+                msg += "You can turn off this check by setting `limit_prediction_length=False`."
+                raise ValueError(msg)
+            warnings.warn(msg)
+
+        if context_length is None:
+            context_length = self.model_context_length
+
+        if context_length > self.model_context_length:
+            warnings.warn(
+                f"The specified context_length {context_length} is greater than the model's default context length {self.model_context_length}. "
+                f"Resetting context_length to {self.model_context_length}."
+            )
+            context_length = self.model_context_length
+
+        test_dataset = Chronos2Dataset.convert_inputs(
+            inputs=inputs,
+            context_length=context_length,
+            prediction_length=prediction_length,
+            batch_size=batch_size,
+            output_patch_size=self.model_output_patch_size,
+            mode=DatasetMode.TEST,
+        )
+        test_loader = DataLoader(test_dataset, batch_size=None, pin_memory=True, shuffle=False, drop_last=False)
+
+        all_predictions: list[torch.Tensor] = []
+        for batch in test_loader:
+            assert batch["future_target"] is None
+            batch_context = batch["context"]
+            batch_group_ids = batch["group_ids"]
+            batch_future_covariates = batch["future_covariates"]
+            batch_target_idx_ranges = batch["target_idx_ranges"]
+
+            if predict_batches_jointly:
+                batch_group_ids = torch.zeros_like(batch_group_ids)
+
+            batch_prediction = self._predict_batch(
+                context=batch_context,
+                group_ids=batch_group_ids,
+                future_covariates=batch_future_covariates,
+                unrolled_quantiles_tensor=unrolled_quantiles_tensor,
+                prediction_length=prediction_length,
+                max_output_patches=max_output_patches,
+                target_idx_ranges=batch_target_idx_ranges,
+            )
+            all_predictions.extend(batch_prediction)
+
+        return all_predictions
+
     def _predict_step(
         self,
         context: torch.Tensor,
