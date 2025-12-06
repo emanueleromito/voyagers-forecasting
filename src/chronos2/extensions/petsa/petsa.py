@@ -32,8 +32,12 @@ class LoRALayer(nn.Module):
         in_dim = original_layer.in_features
         out_dim = original_layer.out_features
         
-        self.lora_A = nn.Parameter(torch.zeros(rank, in_dim))
-        self.lora_B = nn.Parameter(torch.zeros(out_dim, rank))
+        # Use same dtype and device as original layer
+        dtype = original_layer.weight.dtype
+        device = original_layer.weight.device
+        
+        self.lora_A = nn.Parameter(torch.zeros(rank, in_dim, dtype=dtype, device=device))
+        self.lora_B = nn.Parameter(torch.zeros(out_dim, rank, dtype=dtype, device=device))
         
         self.reset_parameters()
 
