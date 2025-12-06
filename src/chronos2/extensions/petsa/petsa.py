@@ -163,8 +163,13 @@ class ChronosPETSAWrapper(nn.Module):
         num_adaptation_patches = math.ceil(mask_len / patch_size)
         
         # --- Step 2: Adaptation Loop ---
+        print(f"DEBUG: Inference mode: {torch.is_inference_mode_enabled()}")
+        print(f"DEBUG: Grad enabled: {torch.is_grad_enabled()}")
+        
         with torch.enable_grad():
-            for _ in range(n_gradient_steps):
+            print(f"DEBUG: Inside enable_grad. Inference mode: {torch.is_inference_mode_enabled()}")
+            print(f"DEBUG: Inside enable_grad. Grad enabled: {torch.is_grad_enabled()}")
+            for i in range(n_gradient_steps):
                 optimizer.zero_grad()
                 
                 # Forward pass to compute loss on the masked portion
@@ -177,6 +182,16 @@ class ChronosPETSAWrapper(nn.Module):
                 )
                 
                 loss = output.loss
+                print(f"DEBUG: Step {i}, Loss requires_grad: {loss.requires_grad}")
+                if not loss.requires_grad:
+                     # Check LoRA params
+                     for name, param in self.named_parameters():
+                         if "lora" in name and param.requires_grad:
+                             print(f"DEBUG: Found trainable param: {name}")
+                             break
+                     else:
+                         print("DEBUG: No trainable LoRA params found!")
+                         
                 loss.backward()
                 optimizer.step()
             
