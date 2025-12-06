@@ -160,21 +160,22 @@ class ChronosPETSAWrapper(nn.Module):
         num_adaptation_patches = math.ceil(mask_len / patch_size)
         
         # --- Step 2: Adaptation Loop ---
-        for _ in range(n_gradient_steps):
-            optimizer.zero_grad()
-            
-            # Forward pass to compute loss on the masked portion
-            output = self.model(
-                context=adaptation_context,
-                context_mask=adaptation_context_mask,
-                future_target=adaptation_target,
-                future_target_mask=adaptation_target_mask,
-                num_output_patches=num_adaptation_patches
-            )
-            
-            loss = output.loss
-            loss.backward()
-            optimizer.step()
+        with torch.enable_grad():
+            for _ in range(n_gradient_steps):
+                optimizer.zero_grad()
+                
+                # Forward pass to compute loss on the masked portion
+                output = self.model(
+                    context=adaptation_context,
+                    context_mask=adaptation_context_mask,
+                    future_target=adaptation_target,
+                    future_target_mask=adaptation_target_mask,
+                    num_output_patches=num_adaptation_patches
+                )
+                
+                loss = output.loss
+                loss.backward()
+                optimizer.step()
             
         # --- Step 3: Forecasting ---
         with torch.no_grad():
