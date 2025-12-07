@@ -113,6 +113,7 @@ class ChronosPETSAWrapper(nn.Module):
         context_mask: Optional[torch.Tensor] = None,
         future_covariates: Optional[torch.Tensor] = None,
         future_covariates_mask: Optional[torch.Tensor] = None,
+        sparse_ratio: float = 0.0,
     ) -> torch.Tensor:
         """
         Performs PETSA:
@@ -164,7 +165,7 @@ class ChronosPETSAWrapper(nn.Module):
         
         # --- Step 2: Adaptation Loop ---
         with torch.enable_grad():
-            for _ in range(n_gradient_steps):
+            for step in range(n_gradient_steps):
                 optimizer.zero_grad()
                 
                 # Forward pass to compute loss on the masked portion
@@ -178,6 +179,29 @@ class ChronosPETSAWrapper(nn.Module):
                 
                 loss = output.loss
                 loss.backward()
+                
+                # Sparse Update Logic (Fisher Approximation Probe)
+                if step == 0 and sparse_ratio > 0.0 and n_gradient_steps > 1:
+                    # Calculate gradient norms for all trainable LoRA parameters
+                    param_grads = []
+                    for name, param in self.named_parameters():
+                        if param.requires_grad and param.grad is not None and "lora" in name:
+                            grad_norm = param.grad.norm().item()
+                            param_grads.append((name, param, grad_norm))
+                    
+                    # Sort by gradient norm (descending)
+                    param_grads.sort(key=lambda x: x[2], reverse=True)
+                    
+                    # Determine cutoff for top parameters
+                    num_params_to_keep = max(1, int(len(param_grads) * (1.0 - sparse_ratio)))
+                    params_to_keep = set([x[0] for x in param_grads[:num_params_to_keep]])
+                    
+                    # Freeze parameters not in the top set
+                    for name, param, _ in param_grads:
+                        if name not in params_to_keep:
+                            param.requires_grad = False
+                            param.grad = None # Create space for optimization
+                
                 optimizer.step()
             
         # --- Step 3: Forecasting ---
@@ -231,6 +255,9 @@ class ChronosPETSAPipeline(Chronos2Pipeline):
 
         max_output_patches = kwargs.pop("max_output_patches", self.max_output_patches)
         unrolled_quantiles = kwargs.pop("unrolled_quantiles", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+        
+        # Capture sparse_ratio for use in _predict_step
+        self._sparse_ratio = kwargs.pop("sparse_ratio", 0.0)
 
         if len(kwargs) > 0:
             raise TypeError(f"Unexpected keyword arguments: {list(kwargs.keys())}.")
@@ -314,6 +341,7 @@ class ChronosPETSAPipeline(Chronos2Pipeline):
             context=context,
             prediction_length=prediction_length,
             future_covariates=future_covariates,
+            sparse_ratio=getattr(self, "_sparse_ratio", 0.0),
         )
         
         return forecast
